@@ -1,0 +1,126 @@
+-- ============================================================
+-- 1. TABLE: yards
+-- ============================================================
+CREATE TABLE yards (
+    id SERIAL PRIMARY KEY,
+    yard_code VARCHAR(20) NOT NULL UNIQUE,
+    name VARCHAR(100),
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- Trigger to auto update updated_at
+CREATE OR REPLACE FUNCTION update_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+   NEW.updated_at = NOW();
+   RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================================
+-- 2. TABLE: blocks
+-- ============================================================
+CREATE TABLE blocks (
+    id SERIAL PRIMARY KEY,
+    yard_id INT NOT NULL,
+    block_code VARCHAR(20) NOT NULL,
+    total_slot INT NOT NULL CHECK (total_slot > 0),
+    total_row INT NOT NULL CHECK (total_row > 0),
+    total_tier INT NOT NULL CHECK (total_tier > 0),
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT fk_blocks_yard
+        FOREIGN KEY (yard_id) REFERENCES yards(id)
+        ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX idx_block_code_per_yard
+    ON blocks (yard_id, block_code);
+
+-- Attach trigger
+CREATE TRIGGER trg_blocks_update
+    BEFORE UPDATE ON blocks
+    FOR EACH ROW
+    EXECUTE FUNCTION update_timestamp();
+
+-- ============================================================
+-- 3. TABLE: yard_plans
+-- ============================================================
+CREATE TABLE yard_plans (
+    id SERIAL PRIMARY KEY,
+    block_id INT NOT NULL,
+    slot_start INT NOT NULL,
+    slot_end INT NOT NULL,
+    row_start INT NOT NULL,
+    row_end INT NOT NULL,
+    container_size INT NOT NULL CHECK (container_size IN (20, 40)),
+    container_height NUMERIC(3,1) NOT NULL CHECK (container_height IN (8.6, 9.6)),
+    container_type VARCHAR(20) NOT NULL, -- DRY, REEFER, dsb
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT fk_plans_block
+        FOREIGN KEY (block_id) REFERENCES blocks(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT check_slot_range CHECK (slot_end >= slot_start),
+    CONSTRAINT check_row_range CHECK (row_end >= row_start)
+);
+
+CREATE INDEX idx_yard_plans_block ON yard_plans (block_id);
+CREATE INDEX idx_yard_plans_spec
+    ON yard_plans (container_size, container_height, container_type);
+
+CREATE TRIGGER trg_yard_plans_update
+    BEFORE UPDATE ON yard_plans
+    FOR EACH ROW
+    EXECUTE FUNCTION update_timestamp();
+
+-- ============================================================
+-- 4. TABLE: container_positions
+-- ============================================================
+CREATE TABLE container_positions (
+    id SERIAL PRIMARY KEY,
+    container_number VARCHAR(20) NOT NULL UNIQUE,
+    block_id INT NOT NULL,
+    slot INT NOT NULL,
+    row INT NOT NULL,
+    tier INT NOT NULL,
+    placed_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    removed_at TIMESTAMP NULL,
+
+    CONSTRAINT fk_positions_block
+        FOREIGN KEY (block_id) REFERENCES blocks(id)
+        ON DELETE CASCADE
+);
+
+-- Index untuk mempercepat pencarian container
+CREATE INDEX idx_container_number ON container_positions(container_number);
+
+-- Index untuk memeriksa slot-row-tiers
+CREATE INDEX idx_position_lookup
+    ON container_positions(block_id, slot, row, tier);
+
+
+
+
+
+INSERT INTO postgres.public.yards (yard_code, name)
+VALUES ('YRD1', 'Yard Satu');
+
+INSERT INTO postgres.public.blocks (yard_id, block_code, total_slot, total_row, total_tier)
+VALUES (1, 'LC01', 10, 5, 3);
+
+
+-- 40 ft --
+INSERT INTO postgres.public.yard_plans
+(block_id, slot_start, slot_end, row_start, row_end, container_size, container_height, container_type)
+VALUES (1, 4, 7, 1, 5, 40, 8.6, 'DRY');
+
+-- 20 --
+INSERT INTO postgres.public.yard_plans 
+(block_id, slot_start, slot_end, row_start, row_end, container_size, container_height, container_type)
+VALUES (1, 1, 3, 1, 5, 20, 8.6, 'DRY');
+

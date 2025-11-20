@@ -10,17 +10,20 @@ import (
 )
 
 type Service struct {
-	repo *repository.Repo
+	repo repository.RepoInterface
 }
 
-func NewService(r *repository.Repo) *Service {
+type ServiceInterface interface {
+	SuggestPosition(ctx context.Context, req entity.SuggestionRequest) (*entity.SuggestedPosition, error)
+	PlaceContainer(ctx context.Context, cp *entity.ContainerPosition) (string, error)
+	PickupContainer(ctx context.Context, containerNumber string) (string, error)
+	RepoGetBlockByCode(ctx context.Context, code string) (*entity.Block, error)
+}
+
+func NewService(r repository.RepoInterface) ServiceInterface {
 	return &Service{repo: r}
 }
 
-// SuggestPosition simple algorithm:
-//   - fetch matching yard_plans (ordered by block, slot_start)
-//   - iterate each plan: for slot in slot_start..slot_end, row in row_start..row_end, tier 1..block.total_tier
-//   - check occupancy via repo
 func (s *Service) SuggestPosition(ctx context.Context, req entity.SuggestionRequest) (*entity.SuggestedPosition, error) {
 	plans, err := s.repo.GetPlansBySpec(ctx, req.Yard, req.ContainerSize, req.ContainerHeight, req.ContainerType)
 	if err != nil {
@@ -84,56 +87,60 @@ func (s *Service) SuggestPosition(ctx context.Context, req entity.SuggestionRequ
 	return nil, errors.New("no free position available in plans")
 }
 
-func (s *Service) PlaceContainer(ctx context.Context, cp *entity.ContainerPosition) error {
+func (s *Service) PlaceContainer(ctx context.Context, cp *entity.ContainerPosition) (string, error) {
 
 	existing, _ := s.repo.FindContainer(ctx, cp.ContainerNumber)
 	if existing != nil {
-		return fmt.Errorf("container %s already placed", cp.ContainerNumber)
+		return "", fmt.Errorf("container %s already placed", cp.ContainerNumber)
 	}
 
 	occ, err := s.repo.IsPositionOccupied(ctx, cp.BlockID, cp.Slot, cp.Row, cp.Tier)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if occ {
-		return errors.New("target position already occupied")
+		return "", errors.New("target position already occupied")
 	}
 
 	if cp.Slot2 > 0 {
 		// check occupancy slot2 for 40ft
 		occ2, err := s.repo.IsPositionOccupied(ctx, cp.BlockID, cp.Slot2, cp.Row, cp.Tier)
 		if err != nil {
-			return err
+			return "", err
 		}
 		if occ2 {
-			return errors.New("target position already occupied")
+			return "", errors.New("target position already occupied")
 		}
 	}
 
 	block, err := s.repo.GetBlockByID(ctx, cp.BlockID)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	//check limit
 	if cp.Tier > block.TotalTier || cp.Row > block.TotalRow || cp.Slot > block.TotalSlot {
-		return errors.New("target position exceeds block limits")
+		return "", errors.New("target position exceeds block limits")
 	}
 	if cp.Slot2 > 0 && cp.Slot2 > block.TotalSlot {
-		return errors.New("target position exceeds block limits")
+		return "", errors.New("target position exceeds block limits")
 	}
 	// place
-	return s.repo.PlaceContainer(ctx, cp)
+	res, err := s.repo.PlaceContainer(ctx, cp)
+	if err != nil {
+		return "", err
+	}
+	return res, nil
 }
 
-func (s *Service) PickupContainer(ctx context.Context, containerNumber string) error {
+func (s *Service) PickupContainer(ctx context.Context, containerNumber string) (string, error) {
 	// check exist
 	existing, err := s.repo.FindContainer(ctx, containerNumber)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if existing == nil {
-		return errors.New("container not found or already removed")
+		return "", errors.New("container not found or already removed")
 	}
 	return s.repo.PickupContainer(ctx, containerNumber)
 }

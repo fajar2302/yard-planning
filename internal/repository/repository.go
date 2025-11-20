@@ -11,7 +11,21 @@ type Repo struct {
 	db *sql.DB
 }
 
-func NewRepo(db *sql.DB) *Repo {
+type RepoInterface interface {
+	GetPlansBySpec(ctx context.Context, yardCode string, size int, height float64, ctype string) ([]entity.YardPlan, error)
+	GetBlockByID(ctx context.Context, id int) (*entity.Block, error)
+	GetBlockByCode(ctx context.Context, code string) (*entity.Block, error)
+
+	IsPositionOccupied(ctx context.Context, blockID, slot, row, tier int) (bool, error)
+	ArePositionsOccupiedFor40ft(ctx context.Context, blockID, slot, row, tier int) (bool, error)
+
+	PlaceContainer(ctx context.Context, cp *entity.ContainerPosition) (string, error)
+
+	FindContainer(ctx context.Context, number string) (*entity.ContainerPosition, error)
+	PickupContainer(ctx context.Context, number string) (string, error)
+}
+
+func NewRepo(db *sql.DB) RepoInterface {
 	return &Repo{db: db}
 }
 
@@ -117,14 +131,17 @@ func (r *Repo) ArePositionsOccupiedFor40ft(ctx context.Context, blockID, slot, r
 	return count > 0, nil
 }
 
-func (r *Repo) PlaceContainer(ctx context.Context, cp *entity.ContainerPosition) error {
+func (r *Repo) PlaceContainer(ctx context.Context, cp *entity.ContainerPosition) (string, error) {
 	q := `
         INSERT INTO container_positions
         (container_number, block_id, slot, row, tier, placed_at)
         VALUES ($1, $2, $3, $4, $5, NOW())
     `
 	_, err := r.db.ExecContext(ctx, q, cp.ContainerNumber, cp.BlockID, cp.Slot, cp.Row, cp.Tier)
-	return err
+	if err != nil {
+		return "", err
+	}
+	return "success", nil
 }
 
 func (r *Repo) FindContainer(ctx context.Context, number string) (*entity.ContainerPosition, error) {
@@ -147,15 +164,15 @@ func (r *Repo) FindContainer(ctx context.Context, number string) (*entity.Contai
 	return &cp, nil
 }
 
-func (r *Repo) PickupContainer(ctx context.Context, number string) error {
+func (r *Repo) PickupContainer(ctx context.Context, number string) (string, error) {
 	q := `UPDATE container_positions SET removed_at=NOW() WHERE container_number=$1 AND removed_at IS NULL`
 	res, err := r.db.ExecContext(ctx, q, number)
 	if err != nil {
-		return err
+		return "", err
 	}
 	rows, _ := res.RowsAffected()
 	if rows == 0 {
-		return errors.New("container not found")
+		return "", errors.New("container not found")
 	}
-	return nil
+	return "success", nil
 }

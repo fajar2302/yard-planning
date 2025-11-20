@@ -11,11 +11,17 @@ import (
 )
 
 type Handler struct {
-	svc *services.Service
+	svc services.ServiceInterface
 	val *validator.Validate
 }
 
-func NewHandler(svc *services.Service) *Handler {
+type HandlerInterface interface {
+	Suggest(c echo.Context) error
+	Placement(c echo.Context) error
+	Pickup(c echo.Context) error
+}
+
+func NewHandler(svc services.ServiceInterface) HandlerInterface {
 	return &Handler{svc: svc, val: validator.New()}
 }
 
@@ -66,11 +72,11 @@ func (h *Handler) Placement(c echo.Context) error {
 		Row:             req.Row,
 		Tier:            req.Tier,
 	}
-
-	if err := h.svc.PlaceContainer(c.Request().Context(), cp); err != nil {
+	str, err := h.svc.PlaceContainer(c.Request().Context(), cp)
+	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
-	return c.JSON(http.StatusOK, map[string]string{"message": "Success"})
+	return c.JSON(http.StatusOK, map[string]string{"message": str})
 }
 
 // POST /pickup
@@ -82,8 +88,10 @@ func (h *Handler) Pickup(c echo.Context) error {
 	if err := h.val.Struct(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
-	if err := h.svc.PickupContainer(c.Request().Context(), req.ContainerNumber); err != nil {
+
+	str, err := h.svc.PickupContainer(c.Request().Context(), req.ContainerNumber)
+	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
-	return c.JSON(http.StatusOK, map[string]string{"message": "Success"})
+	return c.JSON(http.StatusOK, map[string]string{"message": str})
 }

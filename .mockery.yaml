@@ -1,0 +1,23 @@
+packages:
+  yard-planning/internal/handler:
+    interfaces:
+      HandlerInterface:
+    config:
+      dir: mocks/handler
+      filename: "{{.InterfaceName}}.go"
+      mockname: "{{.InterfaceName}}"
+
+  yard-planning/internal/services:
+    interfaces:
+      ServiceInterface:
+    config:
+      dir: mocks/services
+      filename: "{{.InterfaceName}}.go"
+      mockname: "{{.InterfaceName}}"
+  yard-planning/internal/repository:
+    interfaces:
+      RepoInterface:
+    config:
+      dir: mocks/repository
+      filename: "{{.InterfaceName}}.go"
+      mockname: "{{.InterfaceName}}"
