@@ -15,7 +15,7 @@ Pastikan sudah terinstall:
   ```bash
   go version
 
-##2. Suggestion
+## 2. Suggestion
 Endpoint: /api/suggestion 
 Digunakan untuk merencanakan planning penempatan cointainer
 requestnya 
@@ -30,7 +30,7 @@ requestnya
 
 
 
-##3 Placement
+## 3 Placement
 Endpoint: /api/placement
 Digunakan untuk menempatkan container ketika setelah mendapatkan perencanaan penempatan
 Requestnya
@@ -44,7 +44,7 @@ Requestnya
 }
 
 
-##4 Pickup
+## 4 Pickup
 Enpoint: /api/pickup
 Digunakan untuk mengeluarkan container dari tempat penyimpanannya
 Requestnya 
